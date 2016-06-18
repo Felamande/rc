@@ -1,0 +1,110 @@
+import datetime
+import builtins
+import os
+import re
+import sqlite3 as msqlite3
+
+def jump(args,stdin=None):
+	from xonsh.dirstack import cd
+	if len(args) < 1:
+		return
+	env = builtins.__xonsh_env__
+	if not env.get("JUMP_DB_PATH"):
+		return
+	dbpath = env.get('JUMP_DB_PATH')[0]
+	dbpath = os.path.expanduser(dbpath)
+	if not os.path.isabs(dbpath):
+		dbpath = os.path.join(os.getcwd(),dbpath)
+	con = msqlite3.connect(os.path.join(dbpath,'jump.db'))
+	cur = con.execute("select path from jump where path like '%{}%'".format(args[0]))
+	grp = cur.fetchall()
+	if len(grp) == 0:
+		return
+	if '-l' in args:
+		print(grp)
+		return
+	nextd = grp[0][0]
+	
+	cd([nextd])
+
+def uncommit():
+	info = $(git diff --shortstat 2> /dev/null)
+	m = re.compile('( (\d+) file(s|) changed|)(, (\d+) insertion(s|)\(\+\)|)(, (\d+) deletion(s|)\(\-\)|)').match(info)
+	grp = m.groups()
+	c = str(grp[1] if grp[1] else '')
+	i = str(grp[4] if grp[4] else '')
+	d = str(grp[7] if grp[7] else '')
+	if c == '':
+		return ''
+	if i == '':
+		return '[{}:-{}]'.format(c,d)
+	if d == '':
+		return '[{}:+{}]'.format(c,i)
+	return '[{}:+{}:-{}]'.format(c,i,d);
+	
+def bkup(args,stdin=None):
+	# pass
+	cp ~/.xonshrc @('/home/kirigiri/.xonsh/.xonshrc-'+datetime.datetime.now().strftime('%Y%m%d'))
+	
+def whichfn(args,stdin=None):
+	for arg in args:
+		if arg in aliases:
+			aliass = aliases[arg]
+			if hasattr(aliass,'__call__'):
+				alias = 'function {} at {}'.format(aliass.__name__,aliass.__module__)
+			else:
+				alias = ''
+				for p in aliases[arg]:
+					alias = alias +' '+ p
+			print('alias: '+alias.strip())
+		else:
+			
+			result = !(/usr/bin/which @(arg))
+			if not result.stderr:
+				print(result.stdout.strip())
+
+def branch():
+	info = $(git symbolic-ref --quiet HEAD 2> /dev/null).strip()
+	if not info:
+		return ''
+	return '({})'.format(os.path.basename(info))
+
+def partcwd():
+	fullcwd = os.path.expanduser($FORMATTER_DICT['cwd']())
+	if len(fullcwd) >40:
+		 part = fullcwd[len(fullcwd)-40:]
+		 slashidx = part.find('/')
+		 return '...'+part[slashidx:]
+	return $FORMATTER_DICT['cwd']()
+
+$FORMATTER_DICT['now'] = lambda : datetime.datetime.now().strftime('%2H:%2M:%2S') 
+$FORMATTER_DICT['uncommit'] = uncommit
+$FORMATTER_DICT['branch'] = branch
+$FORMATTER_DICT['partcwd'] = partcwd 
+$PROMPT='{BOLD_BLUE}{env_name}{user}@{hostname}{BOLD_GREEN} {partcwd}{branch_color} {branch}{uncommit}{NO_COLOR} {BOLD_BLUE}\n{BOLD_RED}{now} → {NO_COLOR}'
+# $PROMPT='{BOLD_RED}[{now}] {BOLD_GREEN}{partcwd}{branch_color} {branch}{uncommit}{NO_COLOR} \n{BOLD_RED}{BOLD_GREEN}→ {NO_COLOR}'
+ #
+$GOPATH = '/home/kirigiri/GoPath'
+$GOBIN = '/home/kirigiri/GoPath/bin'
+$GOARCH='amd64'
+$GOOS='linux'
+$PATH = $PATH +$GOPATH +[$GOBIN,'/opt/visual-studio-code']
+$JUMP_DB_PATH = '~/.xonsh'
+$TITLE = '{current_job}{user}@{hostname}'
+
+aliases['j'] = jump
+aliases['bk'] = bkup
+aliases['which'] = whichfn
+aliases['yr'] = 'yaourt -Rs'
+aliases['..'] = 'source ~/.xonshrc'
+aliases['.'] = 'source'
+aliases['yuu'] = 'yaourt -Syu'
+aliases['y'] = 'yaourt'
+aliases['yss'] = 'yaourt -Ss'
+aliases['ys'] = 'yaourt -S'
+aliases['/'] = 'xdg-open'
+aliases['cls']='clear'
+aliases['ll']='ls -aFl'
+
+$(aria2c -D --conf-path=/home/kirigiri/.aria2/aria2.conf)
+# print('welcome')
